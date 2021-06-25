@@ -1,9 +1,10 @@
-#include "stm32f10x.h"                  // Device header
+#include "stm32f10x.h"                  
 int durum=0;
 int durum2=0;
 int eepromdurum=0;
 int eepromdurum2=0;
-
+uint8_t bayrak=0;
+uint8_t bayrak2=0;
 
 void systick_init(void)
 {
@@ -30,53 +31,56 @@ void DelayMs(unsigned long t)
 }
 
 
-#define EEPROM_BASLANGIC_ADDRESI ((uint32_t)0x0801F800) //126. page
+#define EEPROM_START_ADDRESS ((uint32_t)0x0801F800) //126. page
 
 uint16_t eeprom_oku(uint32_t  adr)
 {
-	adr=EEPROM_BASLANGIC_ADDRESI+adr;
+	adr=EEPROM_START_ADDRESS+adr;
   uint16_t * Pntr = (uint16_t *)adr;
   return(*Pntr);  
 }
-///////////////// FLASH KILIDI AÇMA ALT PROGRAMI /////////////////////    
-void Flash_acik (void)
+///////////////// FLASH KILIDI AÃ‡MA ALT PROGRAMI /////////////////////    
+void Unlock_Flash (void)
 {
-  FLASH->KEYR=0x45670123;  //Flash kilidini açmak için FLASH->KEYR registerine KEY1 ve KEY2 sirayla yazilmalidir
+  FLASH->KEYR=0x45670123;  //Flash kilidini aÃ§mak iÃ§in FLASH->KEYR registerine KEY1 ve KEY2 sirayla yazilmalidir
   FLASH->KEYR=0xCDEF89AB;
 }
 ///////////////// FLASH KILITLEME ALT PROGRAMI ///////////////////// 
-void Flash_kapali (void)
+void Lock_Flash (void)
 {
   FLASH->CR=0x00000080;  //FLASH_CR registeri resetlendiginde FLASH kiltlenmis olur
 }
 //////////////// ISTENILEN ADRESTEKI VERIYI FLASHTAN SILME ALT PROGRAMI //////
 void eeprom_sil (uint32_t i)
 {
-//	Unlock_Flash();
   FLASH->CR|=0x00000002;            //PER enable
-  FLASH->AR=EEPROM_BASLANGIC_ADDRESI+i;//FLASH->AR registerine silinmek istenen adres yazilir
+  FLASH->AR=EEPROM_START_ADDRESS+i;//FLASH->AR registerine silinmek istenen adres yazilir
   FLASH->CR|=0x00000040;            //STRT anable
   while((FLASH->SR&0x00000001));    //Islem bitene kadar bekle(BUSY kontrol ediliyor)
-  FLASH->CR &= ~0x00000042;         //FLASH->CR ilk durumuna aliniyor (kilit hala açik!) 
-	Flash_kapali();
+  FLASH->CR &= ~0x00000042;         //FLASH->CR ilk durumuna aliniyor (kilit hala aÃ§ik!) 
+	Lock_Flash();
 }
 ///////////////// ISTENILEN ADRESE VERI YAZMA ALT PROGRAMI /////////////////////
-void eeprom_yaz (uint32_t i, uint16_t veri)
+void Write_Flash (uint32_t adr, uint16_t data)
 {
   FLASH->CR|=0x00000001;           //PG enable
-	i=EEPROM_BASLANGIC_ADDRESI+i;
-  *(__IO uint16_t*)i = veri;     //istenen adrese istenen data yaziliyor
+  *(__IO uint16_t*)adr = data;     //istenen adrese istenen data yaziliyor
   while((FLASH->SR&0x00000001));   //Islem bitene kadar bekle(BUSY kontrol ediliyor)
 }
-
+void eeprom_yaz(int i,int veri)
+{
+//    Unlock_Flash();
+//    eeprom_sil(i); 
+    Write_Flash(EEPROM_START_ADDRESS+i,veri);
+//    Lock_Flash(); 
+}	
 
 
 
 void butonanahtar(void){
 		if(GPIOA->IDR & (1<<3)) /// Checking status of PIN ! portA  A9 pini
 		{
-			durum=!durum;
-			
+			durum=!durum;	
 		}
 		while(GPIOA->IDR & (1<<3))	
 		{
@@ -88,7 +92,6 @@ void butonanahtar2(void){
 		if(GPIOA->IDR & (1<<6)) /// Checking status of PIN ! portA  A9 pini
 		{
 			durum2=!durum2;
-			eeprom_yaz(6,0x01);
 		}
 		while(GPIOA->IDR & (1<<6))	
 		{
@@ -114,9 +117,9 @@ systick_init();
 
     butonanahtar();
 		butonanahtar2();		
-    eepromdurum=eeprom_oku(4);
-    eepromdurum2=eeprom_oku(6);
-	  Flash_acik();	
+eepromdurum=eeprom_oku(4);
+eepromdurum2=eeprom_oku(6);
+				Unlock_Flash();	
 		if(durum==1 || eepromdurum==0x02) //a3
 		{ 
 		 GPIOA->ODR &= ~0x1000;
@@ -128,8 +131,6 @@ systick_init();
 		else{
 		 GPIOA->ODR |= 0x1000;		
 		}
-
-
 		if(durum2==1 || eepromdurum2==0x02) //a6
 		{
 		 GPIOA->ODR &=~0x0200;	
@@ -141,8 +142,6 @@ systick_init();
 		else{
 		 GPIOA->ODR |= 0x0200;
 		}
-
-
      eeprom_sil(0);
   }
 	
